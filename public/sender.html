@@ -43,6 +43,7 @@
       // 120ms keeps dynamic QR updates responsive while limiting CPU/battery cost on mobile browsers.
       const SCAN_DELAY_MS = 120;
       let lastSent = '';
+      let cameraStream = null;
 
       ws.onopen = () => {
         statusEl.textContent = 'WebSocket 已连接，等待扫码结果...';
@@ -50,6 +51,10 @@
 
       ws.onclose = () => {
         statusEl.textContent = 'WebSocket 已断开';
+        if (cameraStream) {
+          cameraStream.getTracks().forEach((track) => track.stop());
+          cameraStream = null;
+        }
       };
 
       function sendContent(content) {
@@ -75,6 +80,7 @@
           video: { facingMode: 'environment' },
           audio: false
         });
+        cameraStream = stream;
         video.srcObject = stream;
 
         async function loop() {
@@ -109,6 +115,13 @@
           return;
         }
         statusEl.textContent = `初始化失败：${err.message || '未知错误'}`;
+      });
+
+      window.addEventListener('beforeunload', () => {
+        if (cameraStream) {
+          cameraStream.getTracks().forEach((track) => track.stop());
+          cameraStream = null;
+        }
       });
     </script>
   </body>

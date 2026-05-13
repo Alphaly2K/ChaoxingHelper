@@ -145,8 +145,14 @@ wsServer.on('connection', (socket, request) => {
   const sessionId = (requestUrl.searchParams.get('session') || '').trim();
   const role = (requestUrl.searchParams.get('role') || '').trim();
 
-  if (!sessionId || !['sender', 'receiver'].includes(role)) {
-    safeSend(socket, { type: 'error', message: 'Invalid session or role' });
+  if (!sessionId) {
+    safeSend(socket, { type: 'error', message: 'Missing session' });
+    socket.close(1008, 'Invalid parameters');
+    return;
+  }
+
+  if (!['sender', 'receiver'].includes(role)) {
+    safeSend(socket, { type: 'error', message: 'Unsupported role' });
     socket.close(1008, 'Invalid parameters');
     return;
   }
@@ -232,6 +238,7 @@ const sessionSweeper = setInterval(() => {
 }, SESSION_SWEEP_INTERVAL_MS);
 
 sessionSweeper.unref();
+server.on('close', () => clearInterval(sessionSweeper));
 
 server.listen(PORT, HOST, () => {
   console.log(`ChaoxingHelper relay server listening on http://${HOST}:${PORT}`);
