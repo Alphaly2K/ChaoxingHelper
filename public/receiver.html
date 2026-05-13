@@ -59,7 +59,7 @@
 
         const img = document.createElement('img');
         img.alt = '实时重建二维码';
-        img.src = `/api/qr?text=${encodeURIComponent(content)}&t=${Date.now()}`;
+        img.src = `/api/qr?text=${encodeURIComponent(content)}`;
         qrWrap.innerHTML = '';
         qrWrap.appendChild(img);
       };
