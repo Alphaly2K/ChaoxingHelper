@@ -41,7 +41,7 @@
       const wsProtocol = location.protocol === 'https:' ? 'wss' : 'ws';
       const ws = new WebSocket(`${wsProtocol}://${location.host}/ws?session=${encodeURIComponent(session)}&role=sender`);
       // 120ms keeps dynamic QR updates responsive while limiting CPU/battery cost on mobile browsers.
-      const SCAN_INTERVAL_MS = 120;
+      const SCAN_DELAY_MS = 120;
       let lastSent = '';
 
       ws.onopen = () => {
@@ -89,7 +89,7 @@
               statusEl.textContent = `扫码失败：${e.message}`;
             }
           }
-          setTimeout(loop, SCAN_INTERVAL_MS);
+          setTimeout(loop, SCAN_DELAY_MS);
         }
 
         loop();

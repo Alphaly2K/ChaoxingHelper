@@ -64,10 +64,9 @@ function serveStaticFile(reqPath, res) {
   let relativePath = reqPath === '/' ? '/index.html' : reqPath;
   relativePath = decodeURIComponent(relativePath);
 
-  const safePath = path.normalize(relativePath).replace(/^([.][.][/\\])+/, '');
-  const filePath = path.join(PUBLIC_DIR, safePath);
+  const filePath = path.resolve(PUBLIC_DIR, `.${relativePath}`);
 
-  if (!filePath.startsWith(PUBLIC_DIR)) {
+  if (!filePath.startsWith(`${PUBLIC_DIR}${path.sep}`)) {
     res.writeHead(403);
     res.end('Forbidden');
     return;
@@ -92,7 +91,7 @@ const server = http.createServer(async (req, res) => {
   const requestUrl = new URL(req.url, `http://${req.headers.host}`);
 
   if (requestUrl.pathname === '/api/session' && req.method === 'POST') {
-    const id = crypto.randomBytes(16).toString('hex');
+    const id = crypto.randomBytes(24).toString('hex');
     getOrCreateSession(id);
     return sendJson(res, 200, { sessionId: id });
   }
