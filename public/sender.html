@@ -40,6 +40,7 @@
 
       const wsProtocol = location.protocol === 'https:' ? 'wss' : 'ws';
       const ws = new WebSocket(`${wsProtocol}://${location.host}/ws?session=${encodeURIComponent(session)}&role=sender`);
+      const SCAN_INTERVAL_MS = 120;
       let lastSent = '';
 
       ws.onopen = () => {
@@ -87,14 +88,26 @@
               statusEl.textContent = `扫码失败：${e.message}`;
             }
           }
-          setTimeout(loop, 120);
+          setTimeout(loop, SCAN_INTERVAL_MS);
         }
 
         loop();
       }
 
       startScanner().catch((err) => {
-        statusEl.textContent = `初始化失败：${err.message}`;
+        if (err?.name === 'NotAllowedError') {
+          statusEl.textContent = '初始化失败：摄像头权限被拒绝，请在浏览器设置中允许摄像头权限。';
+          return;
+        }
+        if (err?.name === 'NotFoundError') {
+          statusEl.textContent = '初始化失败：未检测到可用摄像头设备。';
+          return;
+        }
+        if (err?.name === 'NotReadableError') {
+          statusEl.textContent = '初始化失败：摄像头被其他应用占用，请关闭后重试。';
+          return;
+        }
+        statusEl.textContent = `初始化失败：${err.message || '未知错误'}`;
       });
     </script>
   </body>

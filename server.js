@@ -9,6 +9,9 @@ const QRCode = require('qrcode');
 const HOST = process.env.HOST || '0.0.0.0';
 const PORT = Number(process.env.PORT || 3000);
 const PUBLIC_DIR = path.join(__dirname, 'public');
+const MAX_QR_CONTENT_LENGTH = 2048;
+const SESSION_IDLE_TTL_MS = 15 * 60 * 1000;
+const SESSION_SWEEP_INTERVAL_MS = 60 * 1000;
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -28,10 +31,15 @@ function getOrCreateSession(sessionId) {
       senders: new Set(),
       receivers: new Set(),
       latest: null,
-      updatedAt: null
+      updatedAt: null,
+      lastActiveAt: Date.now()
     });
   }
   return sessions.get(sessionId);
+}
+
+function touchSession(session) {
+  session.lastActiveAt = Date.now();
 }
 
 function cleanupSession(sessionId) {
@@ -84,7 +92,7 @@ const server = http.createServer(async (req, res) => {
   const requestUrl = new URL(req.url, `http://${req.headers.host}`);
 
   if (requestUrl.pathname === '/api/session' && req.method === 'POST') {
-    const id = crypto.randomBytes(4).toString('hex');
+    const id = crypto.randomBytes(16).toString('hex');
     getOrCreateSession(id);
     return sendJson(res, 200, { sessionId: id });
   }
@@ -93,6 +101,9 @@ const server = http.createServer(async (req, res) => {
     const text = requestUrl.searchParams.get('text') || '';
     if (!text) {
       return sendJson(res, 400, { error: 'Missing text' });
+    }
+    if (text.length > MAX_QR_CONTENT_LENGTH) {
+      return sendJson(res, 400, { error: `Text too long (max ${MAX_QR_CONTENT_LENGTH})` });
     }
 
     try {
@@ -142,6 +153,7 @@ wsServer.on('connection', (socket, request) => {
   }
 
   const session = getOrCreateSession(sessionId);
+  touchSession(session);
   if (role === 'sender') session.senders.add(socket);
   if (role === 'receiver') session.receivers.add(socket);
 
@@ -174,9 +186,14 @@ wsServer.on('connection', (socket, request) => {
 
     const content = typeof data.content === 'string' ? data.content.trim() : '';
     if (!content) return;
+    if (content.length > MAX_QR_CONTENT_LENGTH) {
+      safeSend(socket, { type: 'error', message: `Content too long (max ${MAX_QR_CONTENT_LENGTH})` });
+      return;
+    }
 
     session.latest = content;
     session.updatedAt = new Date().toISOString();
+    touchSession(session);
 
     const payload = {
       type: 'qr_update',
@@ -192,15 +209,30 @@ wsServer.on('connection', (socket, request) => {
   socket.on('close', () => {
     session.senders.delete(socket);
     session.receivers.delete(socket);
+    touchSession(session);
     cleanupSession(sessionId);
   });
 
   socket.on('error', () => {
     session.senders.delete(socket);
     session.receivers.delete(socket);
+    touchSession(session);
     cleanupSession(sessionId);
   });
 });
+
+const sessionSweeper = setInterval(() => {
+  const now = Date.now();
+  for (const [sessionId, session] of sessions.entries()) {
+    const noConnections = session.senders.size === 0 && session.receivers.size === 0;
+    const isIdle = now - session.lastActiveAt > SESSION_IDLE_TTL_MS;
+    if (noConnections && isIdle) {
+      sessions.delete(sessionId);
+    }
+  }
+}, SESSION_SWEEP_INTERVAL_MS);
+
+sessionSweeper.unref();
 
 server.listen(PORT, HOST, () => {
   console.log(`ChaoxingHelper relay server listening on http://${HOST}:${PORT}`);

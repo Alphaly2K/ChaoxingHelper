@@ -44,7 +44,13 @@
       };
 
       ws.onmessage = (event) => {
-        const payload = JSON.parse(event.data);
+        let payload;
+        try {
+          payload = JSON.parse(event.data);
+        } catch {
+          statusEl.textContent = '收到无效消息，已忽略。';
+          return;
+        }
         if (payload.type !== 'qr_update' || !payload.content) return;
 
         const content = payload.content;
