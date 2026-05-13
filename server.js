@@ -235,5 +235,5 @@ const sessionSweeper = setInterval(() => {
 sessionSweeper.unref();
 
 server.listen(PORT, HOST, () => {
-  console.log(`chaoxinghelper relay server listening on http://${HOST}:${PORT}`);
+  console.log(`ChaoxingHelper relay server listening on http://${HOST}:${PORT}`);
 });
