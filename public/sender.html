@@ -41,7 +41,7 @@
 
       const wsProtocol = location.protocol === 'https:' ? 'wss' : 'ws';
       const ws = new WebSocket(`${wsProtocol}://${location.host}/ws?session=${encodeURIComponent(session)}&role=sender`);
-      // 120ms keeps dynamic QR updates responsive while limiting CPU/battery cost on mobile browsers.
+      // 120ms keeps dynamic QR updates responsive while limiting CPU/battery cost on mobile browsers
       const SCAN_DELAY_MS = 120;
       let lastSent = '';
       let cameraStream = null;
