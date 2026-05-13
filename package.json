@@ -20,6 +20,7 @@
   },
   "homepage": "https://github.com/Alphaly2K/ChaoxingHelper#readme",
   "dependencies": {
+    "jsqr": "^1.4.0",
     "qrcode": "^1.5.4",
     "ws": "^8.20.1"
   }

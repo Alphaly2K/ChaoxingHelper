@@ -27,6 +27,7 @@
     <p>最新发送内容：</p>
     <div class="mono" id="lastContent">-</div>
 
+    <script src="/vendor/jsQR.js"></script>
     <script>
       const params = new URLSearchParams(location.search);
       const session = params.get('session') || 'demo';
@@ -44,6 +45,15 @@
       const SCAN_DELAY_MS = 120;
       let lastSent = '';
       let cameraStream = null;
+      const fallbackCanvas = document.createElement('canvas');
+      const fallbackCtx = fallbackCanvas.getContext('2d', { willReadFrequently: true });
+
+      function stopCamera() {
+        if (cameraStream) {
+          cameraStream.getTracks().forEach((track) => track.stop());
+          cameraStream = null;
+        }
+      }
 
       ws.onopen = () => {
         statusEl.textContent = 'WebSocket 已连接，等待扫码结果...';
@@ -51,10 +61,7 @@
 
       ws.onclose = () => {
         statusEl.textContent = 'WebSocket 已断开';
-        if (cameraStream) {
-          cameraStream.getTracks().forEach((track) => track.stop());
-          cameraStream = null;
-        }
+        stopCamera();
       };
 
       function sendContent(content) {
@@ -70,26 +77,60 @@
       });
 
       async function startScanner() {
-        if (!('BarcodeDetector' in window)) {
-          statusEl.textContent = '当前浏览器不支持 BarcodeDetector，请使用手动输入模式。';
-          return;
-        }
-
-        const detector = new BarcodeDetector({ formats: ['qr_code'] });
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: 'environment' },
           audio: false
         });
         cameraStream = stream;
         video.srcObject = stream;
+        await video.play();
+
+        const canUseNative = 'BarcodeDetector' in window;
+        const canUseJsFallback = typeof window.jsQR === 'function';
+
+        let detector = null;
+        if (canUseNative) {
+          try {
+            detector = new BarcodeDetector({ formats: ['qr_code'] });
+            statusEl.textContent = '已启用 BarcodeDetector 扫码。';
+          } catch {
+            detector = null;
+          }
+        }
+
+        if (!detector && canUseJsFallback) {
+          statusEl.textContent = 'BarcodeDetector 不可用，已降级到 JS 扫码。';
+        }
+
+        if (!detector && !canUseJsFallback) {
+          stopCamera();
+          statusEl.textContent = '当前浏览器不支持扫码能力，请使用手动输入模式。';
+          return;
+        }
 
         async function loop() {
           if (video.readyState >= 2) {
             try {
-              const barcodes = await detector.detect(video);
-              if (barcodes.length > 0 && barcodes[0].rawValue) {
-                sendContent(barcodes[0].rawValue);
-                statusEl.textContent = `已上传：${new Date().toLocaleTimeString()}`;
+              if (detector) {
+                const barcodes = await detector.detect(video);
+                if (barcodes.length > 0 && barcodes[0].rawValue) {
+                  sendContent(barcodes[0].rawValue);
+                  statusEl.textContent = `已上传：${new Date().toLocaleTimeString()}`;
+                }
+              } else if (fallbackCtx) {
+                const width = video.videoWidth;
+                const height = video.videoHeight;
+                if (width > 0 && height > 0) {
+                  fallbackCanvas.width = width;
+                  fallbackCanvas.height = height;
+                  fallbackCtx.drawImage(video, 0, 0, width, height);
+                  const frame = fallbackCtx.getImageData(0, 0, width, height);
+                  const code = window.jsQR(frame.data, width, height, { inversionAttempts: 'attemptBoth' });
+                  if (code?.data) {
+                    sendContent(code.data);
+                    statusEl.textContent = `已上传：${new Date().toLocaleTimeString()}`;
+                  }
+                }
               }
             } catch (e) {
               statusEl.textContent = `扫码失败：${e.message}`;
@@ -118,10 +159,7 @@
       });
 
       window.addEventListener('beforeunload', () => {
-        if (cameraStream) {
-          cameraStream.getTracks().forEach((track) => track.stop());
-          cameraStream = null;
-        }
+        stopCamera();
       });
     </script>
   </body>

@@ -40,8 +40,9 @@ npm start
 ### Android 支持
 
 - 推荐 Chrome（Android 版本较新）
-- 发码端依赖 `BarcodeDetector` 与摄像头权限
-- 若设备浏览器不支持 `BarcodeDetector`，可在发码端使用“手动输入模式”粘贴二维码内容
+- 发码端优先使用 `BarcodeDetector` 与摄像头权限
+- 若设备浏览器不支持 `BarcodeDetector`（常见于部分国产机环境），会自动降级到纯 JS 解码方案（`jsQR`）
+- 若自动扫码能力仍不可用，可在发码端使用“手动输入模式”粘贴二维码内容
 
 ## 协议（WebSocket）
 
