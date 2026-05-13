@@ -1,0 +1,26 @@
+{
+  "name": "chaoxinghelper",
+  "version": "1.0.0",
+  "description": "Realtime QR relay helper for dynamic QR transfer",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Alphaly2K/ChaoxingHelper.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Alphaly2K/ChaoxingHelper/issues"
+  },
+  "homepage": "https://github.com/Alphaly2K/ChaoxingHelper#readme",
+  "dependencies": {
+    "qrcode": "^1.5.4",
+    "ws": "^8.20.1"
+  }
+}

@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>发码端</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 16px; }
+      video { width: min(100%, 420px); border-radius: 8px; background: #000; }
+      .status { margin-top: 12px; }
+      input { width: min(100%, 420px); }
+      button { margin-top: 8px; }
+      .mono { font-family: ui-monospace, monospace; word-break: break-all; }
+    </style>
+  </head>
+  <body>
+    <h2>发码端（扫码上传）</h2>
+    <p>会话号：<span id="session"></span></p>
+    <video id="video" autoplay playsinline muted></video>
+    <div class="status" id="status">初始化中...</div>
+
+    <p>兼容模式（手动输入内容）：</p>
+    <input id="manualInput" placeholder="粘贴二维码内容" />
+    <br />
+    <button id="manualSendBtn">手动发送</button>
+
+    <p>最新发送内容：</p>
+    <div class="mono" id="lastContent">-</div>
+
+    <script>
+      const params = new URLSearchParams(location.search);
+      const session = params.get('session') || 'demo';
+      document.getElementById('session').textContent = session;
+
+      const statusEl = document.getElementById('status');
+      const lastContentEl = document.getElementById('lastContent');
+      const manualInput = document.getElementById('manualInput');
+      const manualSendBtn = document.getElementById('manualSendBtn');
+      const video = document.getElementById('video');
+
+      const wsProtocol = location.protocol === 'https:' ? 'wss' : 'ws';
+      const ws = new WebSocket(`${wsProtocol}://${location.host}/ws?session=${encodeURIComponent(session)}&role=sender`);
+      let lastSent = '';
+
+      ws.onopen = () => {
+        statusEl.textContent = 'WebSocket 已连接，等待扫码结果...';
+      };
+
+      ws.onclose = () => {
+        statusEl.textContent = 'WebSocket 已断开';
+      };
+
+      function sendContent(content) {
+        const value = (content || '').trim();
+        if (!value || value === lastSent) return;
+        lastSent = value;
+        lastContentEl.textContent = value;
+        ws.send(JSON.stringify({ type: 'qr_update', content: value }));
+      }
+
+      manualSendBtn.addEventListener('click', () => {
+        sendContent(manualInput.value);
+      });
+
+      async function startScanner() {
+        if (!('BarcodeDetector' in window)) {
+          statusEl.textContent = '当前浏览器不支持 BarcodeDetector，请使用手动输入模式。';
+          return;
+        }
+
+        const detector = new BarcodeDetector({ formats: ['qr_code'] });
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment' },
+          audio: false
+        });
+        video.srcObject = stream;
+
+        async function loop() {
+          if (video.readyState >= 2) {
+            try {
+              const barcodes = await detector.detect(video);
+              if (barcodes.length > 0 && barcodes[0].rawValue) {
+                sendContent(barcodes[0].rawValue);
+                statusEl.textContent = `已上传：${new Date().toLocaleTimeString()}`;
+              }
+            } catch (e) {
+              statusEl.textContent = `扫码失败：${e.message}`;
+            }
+          }
+          setTimeout(loop, 120);
+        }
+
+        loop();
+      }
+
+      startScanner().catch((err) => {
+        statusEl.textContent = `初始化失败：${err.message}`;
+      });
+    </script>
+  </body>
+</html>
