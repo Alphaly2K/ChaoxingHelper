@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>接码端</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 16px; }
+      #qrWrap { width: min(92vw, 520px); aspect-ratio: 1; border: 1px solid #ccc; display: grid; place-items: center; }
+      #qrWrap img { width: 100%; height: 100%; object-fit: contain; }
+      .mono { font-family: ui-monospace, monospace; word-break: break-all; }
+    </style>
+  </head>
+  <body>
+    <h2>接码端（重建展示）</h2>
+    <p>会话号：<span id="session"></span></p>
+    <p id="status">等待连接...</p>
+
+    <div id="qrWrap"><span>等待二维码内容...</span></div>
+
+    <p>当前内容：</p>
+    <div id="content" class="mono">-</div>
+    <p>更新时间：<span id="updatedAt">-</span></p>
+
+    <script>
+      const params = new URLSearchParams(location.search);
+      const session = params.get('session') || 'demo';
+      document.getElementById('session').textContent = session;
+
+      const statusEl = document.getElementById('status');
+      const qrWrap = document.getElementById('qrWrap');
+      const contentEl = document.getElementById('content');
+      const updatedAtEl = document.getElementById('updatedAt');
+
+      const wsProtocol = location.protocol === 'https:' ? 'wss' : 'ws';
+      const ws = new WebSocket(`${wsProtocol}://${location.host}/ws?session=${encodeURIComponent(session)}&role=receiver`);
+
+      ws.onopen = () => {
+        statusEl.textContent = '已连接，等待发码端上传内容...';
+      };
+
+      ws.onclose = () => {
+        statusEl.textContent = '连接已断开';
+      };
+
+      ws.onmessage = (event) => {
+        let payload;
+        try {
+          payload = JSON.parse(event.data);
+        } catch {
+          statusEl.textContent = '收到无效消息，已忽略。';
+          return;
+        }
+        if (payload.type !== 'qr_update' || !payload.content) return;
+
+        const content = payload.content;
+        contentEl.textContent = content;
+        updatedAtEl.textContent = payload.updatedAt || new Date().toISOString();
+
+        const img = document.createElement('img');
+        img.alt = '实时重建二维码';
+        img.src = `/api/qr?text=${encodeURIComponent(content)}`;
+        qrWrap.innerHTML = '';
+        qrWrap.appendChild(img);
+      };
+    </script>
+  </body>
+</html>

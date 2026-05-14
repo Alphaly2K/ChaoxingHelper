@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>发码端</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 16px; }
+      video { width: min(100%, 420px); border-radius: 8px; background: #000; }
+      .status { margin-top: 12px; }
+      input { width: min(100%, 420px); }
+      button { margin-top: 8px; }
+      .mono { font-family: ui-monospace, monospace; word-break: break-all; }
+    </style>
+  </head>
+  <body>
+    <h2>发码端（扫码上传）</h2>
+    <p>会话号：<span id="session"></span></p>
+    <video id="video" autoplay playsinline muted></video>
+    <div class="status" id="status">初始化中...</div>
+
+    <p>兼容模式（手动输入内容）：</p>
+    <input id="manualInput" placeholder="粘贴二维码内容" />
+    <br />
+    <button id="manualSendBtn">手动发送</button>
+
+    <p>最新发送内容：</p>
+    <div class="mono" id="lastContent">-</div>
+
+    <script src="/vendor/jsQR.js"></script>
+    <script>
+      const params = new URLSearchParams(location.search);
+      const session = params.get('session') || 'demo';
+      document.getElementById('session').textContent = session;
+
+      const statusEl = document.getElementById('status');
+      const lastContentEl = document.getElementById('lastContent');
+      const manualInput = document.getElementById('manualInput');
+      const manualSendBtn = document.getElementById('manualSendBtn');
+      const video = document.getElementById('video');
+
+      const wsProtocol = location.protocol === 'https:' ? 'wss' : 'ws';
+      const ws = new WebSocket(`${wsProtocol}://${location.host}/ws?session=${encodeURIComponent(session)}&role=sender`);
+      // 120ms keeps dynamic QR updates responsive while limiting CPU/battery cost on mobile browsers
+      const SCAN_DELAY_MS = 120;
+      let lastSent = '';
+      let cameraStream = null;
+      const fallbackCanvas = document.createElement('canvas');
+      const fallbackCtx = fallbackCanvas.getContext('2d', { willReadFrequently: true });
+
+      function stopCamera() {
+        if (cameraStream) {
+          cameraStream.getTracks().forEach((track) => track.stop());
+          cameraStream = null;
+        }
+      }
+
+      ws.onopen = () => {
+        statusEl.textContent = 'WebSocket 已连接，等待扫码结果...';
+      };
+
+      ws.onclose = () => {
+        statusEl.textContent = 'WebSocket 已断开';
+        stopCamera();
+      };
+
+      function sendContent(content) {
+        const value = (content || '').trim();
+        if (!value || value === lastSent) return;
+        lastSent = value;
+        lastContentEl.textContent = value;
+        ws.send(JSON.stringify({ type: 'qr_update', content: value }));
+      }
+
+      manualSendBtn.addEventListener('click', () => {
+        sendContent(manualInput.value);
+      });
+
+      async function startScanner() {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment' },
+          audio: false
+        });
+        cameraStream = stream;
+        video.srcObject = stream;
+        await video.play();
+
+        const canUseNative = 'BarcodeDetector' in window;
+        const canUseJsFallback = typeof window.jsQR === 'function';
+
+        let detector = null;
+        if (canUseNative) {
+          try {
+            detector = new BarcodeDetector({ formats: ['qr_code'] });
+            statusEl.textContent = '已启用 BarcodeDetector 扫码。';
+          } catch {
+            detector = null;
+          }
+        }
+
+        if (!detector && canUseJsFallback) {
+          statusEl.textContent = 'BarcodeDetector 不可用，已降级到 JS 扫码。';
+        }
+
+        if (!detector && !canUseJsFallback) {
+          stopCamera();
+          statusEl.textContent = '当前浏览器不支持扫码能力，请使用手动输入模式。';
+          return;
+        }
+
+        async function loop() {
+          if (video.readyState >= 2) {
+            try {
+              if (detector) {
+                const barcodes = await detector.detect(video);
+                if (barcodes.length > 0 && barcodes[0].rawValue) {
+                  sendContent(barcodes[0].rawValue);
+                  statusEl.textContent = `已上传：${new Date().toLocaleTimeString()}`;
+                }
+              } else if (fallbackCtx) {
+                const width = video.videoWidth;
+                const height = video.videoHeight;
+                if (width > 0 && height > 0) {
+                  fallbackCanvas.width = width;
+                  fallbackCanvas.height = height;
+                  fallbackCtx.drawImage(video, 0, 0, width, height);
+                  const frame = fallbackCtx.getImageData(0, 0, width, height);
+                  const code = window.jsQR(frame.data, width, height, { inversionAttempts: 'attemptBoth' });
+                  if (code?.data) {
+                    sendContent(code.data);
+                    statusEl.textContent = `已上传：${new Date().toLocaleTimeString()}`;
+                  }
+                }
+              }
+            } catch (e) {
+              statusEl.textContent = `扫码失败：${e.message}`;
+            }
+          }
+          setTimeout(loop, SCAN_DELAY_MS);
+        }
+
+        loop();
+      }
+
+      startScanner().catch((err) => {
+        if (err?.name === 'NotAllowedError') {
+          statusEl.textContent = '初始化失败：摄像头权限被拒绝，请在浏览器设置中允许摄像头权限。';
+          return;
+        }
+        if (err?.name === 'NotFoundError') {
+          statusEl.textContent = '初始化失败：未检测到可用摄像头设备。';
+          return;
+        }
+        if (err?.name === 'NotReadableError') {
+          statusEl.textContent = '初始化失败：摄像头被其他应用占用，请关闭后重试。';
+          return;
+        }
+        statusEl.textContent = `初始化失败：${err.message || '未知错误'}`;
+      });
+
+      window.addEventListener('beforeunload', () => {
+        stopCamera();
+      });
+    </script>
+  </body>
+</html>

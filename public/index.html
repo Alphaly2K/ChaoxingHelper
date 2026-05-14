@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>ChaoxingHelper</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 24px; line-height: 1.5; }
+      code { background: #f2f2f2; padding: 2px 6px; border-radius: 4px; }
+      .box { max-width: 720px; }
+      a { display: inline-block; margin-right: 16px; margin-top: 8px; }
+      button { margin-left: 8px; }
+    </style>
+  </head>
+  <body>
+    <div class="box">
+      <h1>ChaoxingHelper</h1>
+      <p>通过“解码后传输内容，再重建二维码”的方式降低动态二维码传输延迟。</p>
+      <p>
+        会话号：
+        <input id="sessionInput" placeholder="手动输入或自动生成" />
+        <button id="createSessionBtn">生成新会话</button>
+      </p>
+      <p>
+        <a id="senderLink" href="#">打开发码端（扫码上传）</a>
+        <a id="receiverLink" href="#">打开接码端（重建展示）</a>
+      </p>
+      <p>建议两个设备使用同一个会话号：发码端负责识别动态二维码，接码端负责实时重建二维码。</p>
+    </div>
+
+    <script>
+      const input = document.getElementById('sessionInput');
+      const senderLink = document.getElementById('senderLink');
+      const receiverLink = document.getElementById('receiverLink');
+      const createSessionBtn = document.getElementById('createSessionBtn');
+
+      function updateLinks() {
+        const session = (input.value || '').trim();
+        const encoded = encodeURIComponent(session || 'demo');
+        senderLink.href = `/sender.html?session=${encoded}`;
+        receiverLink.href = `/receiver.html?session=${encoded}`;
+      }
+
+      input.addEventListener('input', updateLinks);
+      createSessionBtn.addEventListener('click', async () => {
+        const res = await fetch('/api/session', { method: 'POST' });
+        const data = await res.json();
+        input.value = data.sessionId;
+        updateLinks();
+      });
+
+      updateLinks();
+    </script>
+  </body>
+</html>
